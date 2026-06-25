@@ -343,7 +343,7 @@ kaskada_w        = 7  // literature [7 MeV, 9 MeV]
 
 # For sf_method != 0
 # U_switch = 1 → use nuclear potential (kaskada_w = 0)
-# U_switch = 0 → ignore nuclear potential and keep kaskada_w
+# U_switch = 0 → ignore nuclear potential (keep kaskada_w)
 U_switch = 1
 
 # Models for the description of nucleus in the cascade:
