@@ -167,10 +167,11 @@ sf_method  = 1 // Jlab SF for Argon, new grid SF for C, grid SF for O and Fe
 #sf_method = 3 // factorized SF for O, Ar, Ca
 
 sf_transparency_table_idx = 1 # Transparency
-#                               1 - Theoretical, 2 - NuWro MC
+#                               1 - Theoretical    (see arXiv:2508.10101 [hep-ph])
+                                2 - tuned NuWro MC (see Phys.Rev.D 113 (2026) 9, 096023)
 sf_transparency_scale = 1  # Scale transparency
-#                            [0.97,1.03] for table_idx = 1
-#                            [0.947,1.079] for table_idx = 2
+#                            [0.97,1.03] for table_idx = 1   (see arXiv:2508.10101 [hep-ph])
+#                            [0.947,1.079] for table_idx = 2 (see Phys.Rev.D 113 (2026) 9, 096023)
 sf_recoil = 1             # Nuclear recoil
 sf_Coulomb = 1            # Couloumb distortion
 sf_src = 1                # Short range NN correlations
@@ -341,8 +342,8 @@ FSI_on       = 1  // use (1) or not (0)
 kaskada_w        = 7  // literature [7 MeV, 9 MeV]
 
 # For sf_method != 0
-# U_switch = 1 → use optical potential U in cascade (kaskada_w = 0)
-# U_switch = 0 → ignore U and keep kaskada_w
+# U_switch = 1 → use nuclear potential (kaskada_w = 0)
+# U_switch = 0 → ignore nuclear potential and keep kaskada_w
 U_switch = 1
 
 # Models for the description of nucleus in the cascade:
@@ -358,7 +359,7 @@ step = 0.2           // length of one step in cascade
 # It has been checked against transparency data that
 # the uncertainty here is not larger than +- 30%
 # -> see Phys.Rev. C 100 (2019) 015505
-# Later study, see e-Print: 2512.23350 [hep-ph] resulted in estimate s=0.76-0.04+0.06
+# Later study (see Phys.Rev.D 113 (2026) 9, 096023) resulted in estimate s=0.76-0.04+0.06
 kaskada_NN_mfp_scale = 0.76
 
 # Input data for the cascade:

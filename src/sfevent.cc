@@ -37,20 +37,21 @@ double sfevent(params &par, event &e, nucleus &t)
   const int N = par.nucleus_n;
 
   // Interaction flags
-  const bool isAnti = l0.pdg < 0;              // true for anti-neutrino
-  const bool onNeutron = N0.pdg == pdg_neutron;// true for target neutron
-  const bool ccAllowed = isAnti ^ onNeutron;   // true for nu+n and nubar+p
-  const bool isElectron = (l0.pdg == pdg_e);   // true for electron interactions
-  const bool isNC = e.flag.nc;                 // true for neutral current intercations
-  const bool doPB = par.pauli_blocking == 1;   // true for enabled pauli blocking
-  const bool doRecoil = par.sf_recoil == 1;    // true for nuclear recoil
-  const bool doCoulomb = par.sf_Coulomb == 1;  // true for coulomb distortion
-  const bool doFSI = par.FSI_on == 1;          // true for FSI
-  const bool doSRC = par.sf_src == 1;          // true for SRC
+  const bool isAnti = l0.pdg < 0;                      // true for anti-neutrino
+  const bool onNeutron = N0.pdg == pdg_neutron;        // true for target neutron
+  const bool ccAllowed = isAnti ^ onNeutron;           // true for nu+n and nubar+p
+  const bool isElectron = (l0.pdg == pdg_e);           // true for electron interactions
+  const bool isNC = e.flag.nc;                         // true for neutral current intercations
+  const bool doPB = par.pauli_blocking == 1;           // true for enabled pauli blocking
+  const bool doRecoil = par.sf_recoil == 1;            // true for nuclear recoil
+  const bool useU = (par.U_switch == 1);               // use nuclear potential 
+  const bool doCoulomb = useU && (par.sf_Coulomb == 1);// true for Coulomb correction
+  const bool doFSI = par.FSI_on == 1;                  // true for FSI
+  const bool doSRC = par.sf_src == 1;                  // true for SRC
 
   int method = par.sf_method;
   bool isCorrelated = false;
-  double pot( 0.0 ), pot_cascade( 0.0 ), prefactor( 1.0 ), xs( 1.0 );
+  double pot( 0.0 ), prefactor( 1.0 ), xs( 1.0 );
   double factor = isAnti ? -1 : 1 ;
 
   if ((e.flag.cc && !ccAllowed) || method == 0) return 0; // If charged current (CC) interaction isn't possible, exit
@@ -229,21 +230,42 @@ double sfevent(params &par, event &e, nucleus &t)
 
    if (doFSI)
    {
-       const double Tk = tPPrime_approx( e.in[0].E(), l1.p().z / l1.momentum(), isElectron, isNC, m2, M ) ;
-       const double rOP = sf->eval_realOP( Tk );                      // Real part of the optical potential
-       pot = ( N1.pdg == pdg_neutron ) ? rOP - factor * averCE: rOP ; // correct for proton and neutron
-       int tidx = par.sf_transparency_table_idx - 1;  // 1→0, 2→1
+    const double Tk = tPPrime_approx(
+        e.in[0].E(),
+        l1.p().z / l1.momentum(),
+        isElectron,
+        isNC,
+        m2,
+        M
+    );
 
-      isTransparent = ( frandom11() <= sf->eval_sqrtOfTransparency(Tk, par.sf_transparency_scale, tidx) );
-      if (!isTransparent)
-      {
-          const double shift = pot + random_omega();
-          if( l1.E() - l0eff.E() > shift ) return 0;
-          else pot = shift;
-       }
-   }
+    int tidx = par.sf_transparency_table_idx - 1;
+
+    isTransparent =
+        (frandom11() <= sf->eval_sqrtOfTransparency(
+            Tk,
+            par.sf_transparency_scale,
+            tidx
+        ));
+
+    if (useU)
+    {
+        const double rOP = sf->eval_realOP(Tk);
+
+        pot = (N1.pdg == pdg_neutron)
+            ? rOP - factor * averCE
+            : rOP;
+
+        if (!isTransparent)
+        {
+            const double shift = pot + random_omega();
+            if (l1.E() - l0eff.E() > shift) return 0;
+            else pot = shift;
+        }
+    }
+    }
    
-   double U = std::min(0.0, pot);
+  double U = useU ? std::min(0.0, pot) : 0.0;
    
   // Pauli blocking   
   if (doPB && par.sf_pb != 0 &&
@@ -314,10 +336,10 @@ double sfevent(params &par, event &e, nucleus &t)
   e.out.push_back(N1);                   // Struck nucleon added to out
   if (isCorrelated && N2.momentum() > 1e-6) {e.out.push_back(N2);} // Handle spectator nucleon
 
-  e.averageCE = averCE;
   e.flag.isTransparent = isTransparent;
-  e.optical_potential  = U; 
   e.flag.isCorrelated  = isCorrelated;  
+  e.averageCE = useU ? averCE : 0.0;
+  e.optical_potential = useU ? U : 0.0;
 
   // Apply acceptance cut for electron scattering
   if (isElectron)

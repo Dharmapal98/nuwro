@@ -85,11 +85,12 @@ inline void render_version_art(const string& version, string out[3])
   {
     int idx = digit_index(c);
     if (idx < 0) continue; // skip non-renderable chars (e.g. leading 'v')
-    if (!first)
+    if (!first) {
       for (int r = 0; r < 3; r++) out[r] += GAP;
+    }  
       for (int r = 0; r < 3; r++) out[r] += DIGIT_GLYPHS[idx][r];
         first = false;
-    }
+  }
 }
 
 static const int  VERSION_LEFT_PAD  = 13;

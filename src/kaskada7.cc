@@ -677,11 +677,16 @@ bool kaskada::leave_nucleus()
   // Nucleons: go through final "climb-out of potential well" and possible jailing
   if (nucleon (p->pdg))
   {
-  double U = (e->flag.qel && par.U_switch == 1 && par.sf_method != 0)
-             ? par.FSI_on == 1
-                 ? e->optical_potential
-                 : p->pdg == pdg_proton ? e->averageCE : 0.0
-             : 0.0;
+   double U = 0.0;
+
+   if (use_optical_potential())
+   {
+    if (par.FSI_on == 1)
+        U += e->optical_potential;
+
+    if (e->flag.cc && p->pdg == pdg_proton)
+        U += e->averageCE;
+   }
 
     double kaskada_w = use_optical_potential() ? 0.0 : par.kaskada_w;
 
@@ -725,11 +730,16 @@ bool kaskada::leave_nucleus_for_single_nucleon(particle &N)
 {
   if (!nucleon(N.pdg)) return true;
 
-  double U = (e->flag.qel && par.U_switch == 1 && par.sf_method != 0)
-             ? par.FSI_on == 1
-                 ? e->optical_potential
-                 : N.pdg == pdg_proton ? e->averageCE : 0.0
-             : 0.0;
+   double U = 0.0;
+
+   if (use_optical_potential())
+   {
+    if (par.FSI_on == 1)
+        U += e->optical_potential;
+
+    if (e->flag.cc && N.pdg == pdg_proton)
+        U += e->averageCE;
+   }
 
   double kaskada_w = use_optical_potential() ? 0.0 : par.kaskada_w;
 
