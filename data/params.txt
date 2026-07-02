@@ -167,8 +167,8 @@ sf_method  = 1 // Jlab SF for Argon, new grid SF for C, grid SF for O and Fe
 #sf_method = 3 // factorized SF for O, Ar, Ca
 
 sf_transparency_table_idx = 1 # Transparency
-#                               1 - Theoretical    (see arXiv:2508.10101 [hep-ph])
-                                2 - tuned NuWro MC (see Phys.Rev.D 113 (2026) 9, 096023)
+#                               1 - Theoretical                     (see arXiv:2508.10101 [hep-ph])
+#                               2 - tuned NuWro MC for stronger INC (see Phys.Rev.D 113 (2026) 9, 096023)
 sf_transparency_scale = 1  # Scale transparency
 #                            [0.97,1.03] for table_idx = 1   (see arXiv:2508.10101 [hep-ph])
 #                            [0.947,1.079] for table_idx = 2 (see Phys.Rev.D 113 (2026) 9, 096023)
@@ -335,13 +335,13 @@ hyp_su3_sym_breaking = 0 // SU(3) symmetry breaking
 #
 ################################################################################
 
-# Turn on FSI
+# Turn on Final-state interactions 
 FSI_on       = 1  // use (1) or not (0)
 
 # Total work of the cascade W (Eb = Ef + W);
 kaskada_w        = 7  // literature [7 MeV, 9 MeV]
 
-# For sf_method != 0
+# For sf_method != 0 in QE
 # U_switch = 1 → use nuclear potential (kaskada_w = 0)
 # U_switch = 0 → ignore nuclear potential (keep kaskada_w)
 U_switch = 1
