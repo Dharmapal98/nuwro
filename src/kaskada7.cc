@@ -1,7 +1,6 @@
 #include "kaskada7.h"
-
 #include <algorithm>
-
+#include <cmath>
 #include "fsi.h"
 
 // Constructor: set up cascade state from params, event and input_data
@@ -98,7 +97,7 @@ int kaskada::kaskadaevent(bool bare_kaskada)
 
   // QE events using Spectral Function (sf_method != 0):
   //   → treat transparent vs non-transparent, correlated vs uncorrelated
-  // FSI implemented consistently for QE-SF channel by RWIK DHARMAPAL BANERJEE, 2025
+  // FSI implemented consistently for QE-SF channel by RWIK DHARMAPAL BANERJEE, 2025-26
   if (isQESF) {
 
       // Transparent events
@@ -162,6 +161,10 @@ int kaskada::kaskadaevent(bool bare_kaskada)
         // Non-Transparent & Uncorrelated: full cascade with possible re-draw if no interaction
         if (!e->flag.isCorrelated)
         {
+          int nod_before_ntuc[18];
+          for (int nod_i = 0; nod_i < 18; ++nod_i) {
+            nod_before_ntuc[nod_i] = e->nod[nod_i];
+          }
 
           // Standard cascade loop
           while (!parts.empty() && nucl->Ar() > 0) {
@@ -198,7 +201,7 @@ int kaskada::kaskadaevent(bool bare_kaskada)
           if (!intercated)
           {
 
-            int    redrawAttempts = 0;
+            int redrawAttempts = 0;
             // Keep track of mean free path scaling for retries
             double original_scale = par.kaskada_NN_mfp_scale;
             double effective_scale = original_scale;
@@ -207,6 +210,12 @@ int kaskada::kaskadaevent(bool bare_kaskada)
           while(!parts.empty()) parts.pop();
 
           while (redrawAttempts < nucl->MAX_EVENT_REDRAWS && !intercated) {
+
+          redrawAttempts++;
+
+          for (int nod_i = 0; nod_i < 18; ++nod_i) {
+            e->nod[nod_i] = nod_before_ntuc[nod_i];
+          }
 
           // Clean up post-state: remove non-leptons so we can retry cascade
           e->post.erase(
@@ -245,7 +254,10 @@ int kaskada::kaskadaevent(bool bare_kaskada)
                  }
                  else {
 
-                    if (nucleon(pt.pdg) and (pt.nucleon_id==1)) intercated = true;
+                    if (nucleon(pt.pdg) and (pt.nucleon_id==1)) {
+                      intercated = true;
+                      par.kaskada_NN_mfp_scale = original_scale;
+                    }
 
                  }
                 }
@@ -255,12 +267,33 @@ int kaskada::kaskadaevent(bool bare_kaskada)
                {
                  while (!parts.empty()) parts.pop();
                }
-               redrawAttempts++;
 
               }
+              
+              if (!intercated) { // fallback
+                for (int nod_i = 0; nod_i < 18; ++nod_i) {
+                  e->nod[nod_i] = nod_before_ntuc[nod_i];
+                }
 
-       // Restore original mfp scale after redraw loop
-       par.kaskada_NN_mfp_scale = original_scale;
+                e->post.erase(
+                  std::remove_if(e->post.begin(), e->post.end(),[](particle& pt){ return !lepton(pt.pdg);}),
+                  e->post.end());
+
+                while (!parts.empty()) parts.pop();
+
+                particle N1 = e->out[1];
+                N1.travelled = 0;
+                prepare_single_nucleon_for_redraw(N1, 1);
+
+                while (!parts.empty()) {
+                  particle p1 = parts.front();
+                  parts.pop();
+                  p = &p1;
+                  leave_nucleus();
+                }
+              }
+
+       par.kaskada_NN_mfp_scale = original_scale; // fallback
 
        }
 
@@ -268,73 +301,136 @@ int kaskada::kaskadaevent(bool bare_kaskada)
 
       }
 
-        // Non-Transparent & Correlated: both nucleons can interact, redraw if N1 fails to interact
+        // Non-Transparent & Correlated: both nucleons can interact,
+        // redraw only N1 if N1 fails to interact.
         else
         {
-
-    // First pass: standard cascade for both nucleons and secondaries
-    while (!parts.empty() && nucl->Ar()>0) {
-
-      particle p1 = parts.front();
-      parts.pop();
-      p = &p1;
-
-      X = prepare_interaction();
-      if (!move_particle()) continue;
-      if (X.r >= radius) leave_nucleus();
-
-      else {
-
-      if (max_step < X.freepath || !make_interaction() || !finalize_interaction()) {
-
-        if (nucleon(p1.pdg))  e->nod[13]++;
-        if (pion (p1.pdg))    e->nod[12]++;
-        if (hyperon (p1.pdg)) e->nod[14]++;
-        parts.push(p1);
-
-      }
-      else {
-
-          if (nucleon(p1.pdg) and (p1.nucleon_id == 1)) {
-
-          // Record if N1 (id=1) has interacted at least once
-          intercated = true;
-
+          int nod_n1_failed_firstpass[18];
+          for (int nod_i = 0; nod_i < 18; ++nod_i) {
+            nod_n1_failed_firstpass[nod_i] = 0;
           }
-        }
-      }
-    }
-            // If no interaction for N1 → clean post and redraw only N1
-            if (!intercated) {
 
-              int redrawAttempts = 0;
+          // First pass: standard cascade for both nucleons.
+          while (!parts.empty() && nucl->Ar() > 0) {
 
-              double cosine_N1 = e->out[1].z / e->out[1].momentum();
+            particle p1 = parts.front();
+            parts.pop();
+            p = &p1;
 
-              double original_scale = par.kaskada_NN_mfp_scale;
-              double effective_scale = original_scale;
+            X = prepare_interaction();
+            if (!move_particle()) continue;
+            if (X.r >= radius) {
+              leave_nucleus();
+            }
+            else {
 
-              while(!parts.empty()) parts.pop(); // safeguard
+              int nod_before_failed_step[18];
+              for (int nod_i = 0; nod_i < 18; ++nod_i) {
+                nod_before_failed_step[nod_i] = e->nod[nod_i];
+              }
 
-              // Redraw attempts only for N1 with progressively shorter mfp
-              while (redrawAttempts < nucl->MAX_EVENT_REDRAWS && !intercated) {
+              if (max_step < X.freepath || !make_interaction() || !finalize_interaction()) {
 
-                // Remove nucleons close in direction to the original N1
-                e->post.erase( std::remove_if( e->post.begin(), e->post.end(), [&](particle &pt) {
-                if (lepton(pt.pdg) || pion(pt.pdg) || hyperon(pt.pdg)) return false; // keep these
-                if (nucleon(pt.pdg)) { return (fabs(pt.z / pt.momentum() - cosine_N1) < nucl->cosine_threshold);} // remove these
-                return false;}), e->post.end());
+                if (nucleon(p1.pdg)) e->nod[13]++;
+                if (pion(p1.pdg))    e->nod[12]++;
+                if (hyperon(p1.pdg)) e->nod[14]++;
 
-                // Strengthen scattering (shorter mfp)
-                effective_scale *= nucl->effective_mfp_scale;
-                par.kaskada_NN_mfp_scale = effective_scale;
+                if (p1.nucleon_id == 1) {
+                  for (int nod_i = 0; nod_i < 18; ++nod_i) {
+                    nod_n1_failed_firstpass[nod_i] +=
+                      e->nod[nod_i] - nod_before_failed_step[nod_i];
+                  }
+                }
 
-                // New N1
-                particle N1 = e->out[1];
-                N1.travelled = 0;
-                prepare_single_nucleon_for_redraw(N1, 1);
+                parts.push(p1);
 
-                while (!parts.empty() && nucl->Ar() > 0) {
+              }
+              else {
+
+                if (nucleon(p1.pdg) and (p1.nucleon_id == 1)) {
+                  // Record if N1 (id=1) has interacted at least once.
+                  intercated = true;
+
+                }
+              }
+            }
+          }
+
+          // If no interaction for N1: then redraw only N1.
+          if (!intercated) {
+
+            for (int nod_i = 0; nod_i < 18; ++nod_i) {
+              e->nod[nod_i] -= nod_n1_failed_firstpass[nod_i];
+            }
+
+            int nod_before_ntc[18];
+            for (int nod_i = 0; nod_i < 18; ++nod_i) {
+              nod_before_ntc[nod_i] = e->nod[nod_i];
+            }
+
+            int redrawAttempts = 0;
+
+            const double N1_px = e->out[1].x;
+            const double N1_py = e->out[1].y;
+            const double N1_pz = e->out[1].z;
+            const double N1_p  = e->out[1].momentum();
+
+            double original_scale = par.kaskada_NN_mfp_scale;
+            double effective_scale = original_scale;
+
+            while (!parts.empty()) parts.pop(); // safeguard
+
+            // Redraw attempts only for N1 with progressively shorter mfp.
+            while (redrawAttempts < nucl->MAX_EVENT_REDRAWS && !intercated) {
+
+              redrawAttempts++;
+
+              for (int nod_i = 0; nod_i < 18; ++nod_i) {
+                e->nod[nod_i] = nod_before_ntc[nod_i];
+              }
+
+              // Remove nucleons close to the original N1 : 1 degree acceptance
+              e->post.erase(
+                std::remove_if(
+                  e->post.begin(),
+                  e->post.end(),
+                  [&](particle &pt)
+                  {
+                    if (lepton(pt.pdg) || pion(pt.pdg) || hyperon(pt.pdg))
+                      return false;
+
+                    if (nucleon(pt.pdg))
+                    {
+                      const double pt_p = pt.momentum();
+
+                      if (N1_p <= 0.0 || pt_p <= 0.0)
+                        return false;
+
+                      double cos_angle =
+                        (N1_px * pt.x + N1_py * pt.y + N1_pz * pt.z) / (N1_p * pt_p);
+
+                      if (cos_angle >  1.0) cos_angle =  1.0;
+                      if (cos_angle < -1.0) cos_angle = -1.0;
+
+                      return (1.0 - cos_angle < nucl->cosine_threshold);
+                    }
+
+                    return false;
+                  }
+                ),
+                e->post.end()
+              );
+
+              // Strengthen scattering for the redrawn N1 only.
+              effective_scale *= nucl->effective_mfp_scale;
+              par.kaskada_NN_mfp_scale = effective_scale;
+
+              // New N1 from the original primary vertex.
+              particle N1 = e->out[1];
+              N1.travelled = 0;
+              prepare_single_nucleon_for_redraw(N1, 1);
+
+              while (!parts.empty() && nucl->Ar() > 0) {
 
                 particle pt = parts.front();
                 parts.pop();
@@ -342,90 +438,99 @@ int kaskada::kaskadaevent(bool bare_kaskada)
 
                 X = prepare_interaction();
                 if (!move_particle()) continue;
-                if (X.r >= radius) leave_nucleus();
-
+                if (X.r >= radius) {
+                  leave_nucleus();
+                }
                 else {
 
-                   if (max_step < X.freepath || !make_interaction() || !finalize_interaction()) {
+                  if (max_step < X.freepath || !make_interaction() || !finalize_interaction()) {
 
-                       if (nucleon(pt.pdg)) e->nod[13]++;
-                       if (pion(pt.pdg))    e->nod[12]++;
-                       if (hyperon(pt.pdg)) e->nod[14]++;
-                       parts.push(pt);
+                    if (nucleon(pt.pdg)) e->nod[13]++;
+                    if (pion(pt.pdg))    e->nod[12]++;
+                    if (hyperon(pt.pdg)) e->nod[14]++;
 
-                   }
-                   else {
+                    parts.push(pt);
 
-                       if (nucleon(pt.pdg) and (pt.nucleon_id == 1)) intercated = true;
+                  }
+                  else {
 
-                     }
-                   }
-                 }
+                    if (nucleon(pt.pdg) and (pt.nucleon_id == 1)) {
+                      intercated = true;
+                      par.kaskada_NN_mfp_scale = original_scale;
+                    }
 
-          if(!parts.empty()) // safeguard
-          {
-            while (!parts.empty()) parts.pop();
+                  }
+                }
+              }
+
+              if (!parts.empty()) // safeguard
+              {
+                while (!parts.empty()) parts.pop();
+              }
+            }
+
+            if (!intercated) { // fallback
+
+              for (int nod_i = 0; nod_i < 18; ++nod_i) {
+                e->nod[nod_i] = nod_before_ntc[nod_i];
+              }
+
+              e->post.erase(
+                std::remove_if(
+                  e->post.begin(),
+                  e->post.end(),
+                  [&](particle &pt)
+                  {
+                    if (lepton(pt.pdg) || pion(pt.pdg) || hyperon(pt.pdg))
+                      return false;
+
+                    if (nucleon(pt.pdg))
+                    {
+                      const double pt_p = pt.momentum();
+
+                      if (N1_p <= 0.0 || pt_p <= 0.0)
+                        return false;
+
+                      double cos_angle =
+                        (N1_px * pt.x + N1_py * pt.y + N1_pz * pt.z) / (N1_p * pt_p);
+
+                      if (cos_angle >  1.0) cos_angle =  1.0;
+                      if (cos_angle < -1.0) cos_angle = -1.0;
+
+                      return (1.0 - cos_angle < nucl->cosine_threshold);
+                    }
+
+                    return false;
+                  }
+                ),
+                e->post.end()
+              );
+
+              while (!parts.empty()) parts.pop();
+
+              particle N1 = e->out[1];
+              N1.travelled = 0;
+              prepare_single_nucleon_for_redraw(N1, 1);
+
+              while (!parts.empty()) {
+                particle p1 = parts.front();
+                parts.pop();
+                p = &p1;
+                leave_nucleus();
+              }
+            }
+
+            par.kaskada_NN_mfp_scale = original_scale;
+
           }
-          redrawAttempts++;
+
+          needs_final_clean = false;
 
         }
-
-       par.kaskada_NN_mfp_scale = original_scale;
-
-      }
-
-      needs_final_clean = false;
-
-    }
    }
   }
 
   if (needs_final_clean) clean();
-
-  // For rare QE events (~0.001%),if no nucleons but >=1 pion(s) in the final state, we identify them as unphysical,
-  // as for QE-SF events there are no nucleons in the final state to subtract the potential from - causing small orders of negative missing energies.
-  // We remove the mesons and insert out[1] (i.e. struck nucleon from vertex) into the final state, effectively making the event transparent.
-  if (e->flag.qel and !e->post.empty()) {
-
-    bool has_nucleon = false;
-    bool has_pion   = false;
-
-    for (auto &pt : e->post) {
-
-    if (nucleon(pt.pdg)) has_nucleon = true;
-    if (pt.pdg == 111 || pt.pdg == 211 || pt.pdg == -211) has_pion = true;
-    if (has_nucleon) break;
-
-    }
-
-    if (!has_nucleon && has_pion)
-    {
-
-      // remove pions from post
-      auto first = (e->post.size() > 1) ? (e->post.begin() + 1) : e->post.end();
-
-      e->post.erase(
-        std::remove_if(first, e->post.end(),
-          [](const particle &pt) {
-            const int pdg = pt.pdg;
-            return (pdg ==  211 || pdg == -211 || pdg ==  111);
-          }),
-        e->post.end()
-      );
-
-      // insert nucleon from primary vertex
-      if (e->out.size() > 1 && nucleon(e->out[1].pdg)) {
-
-        particle N1 = e->out[1];
-        N1.endproc   = escape;
-        N1.nucleon_id = 1;
-
-        leave_nucleus_for_single_nucleon(N1);
-
-        if (par.sf_method != 0) e->flag.isTransparent = true;
-      }
-    }
-  }
 
   // Update remaining protons/neutrons in nucleus
   e->pr=nucl->Zr();
@@ -454,7 +559,7 @@ void kaskada::prepare_particles()
       {
         p1.primary = true;
 
-        double kaskada_w = use_optical_potential() ? 0.0 : par.kaskada_w;
+        double kaskada_w = par.kaskada_w;
 
         // Tag primary and spectator nucleons form SF-event vertex
         if(e->flag.qel and par.sf_method != 0) {
@@ -466,7 +571,7 @@ void kaskada::prepare_particles()
          }
       }
 
-        // add energy substracted in the primary vertex for GFG LFG and SF
+        // add in-medium energy for GFG LFG and SF
         if (e->flag.qel and (par.sf_method != 0 or par.nucleus_target == 2)) {
             p1.set_energy (p1.E() + nucl->Ef(p1) + kaskada_w);
         }
@@ -475,6 +580,7 @@ void kaskada::prepare_particles()
           p1.set_energy (p1.E() + par.nucleus_E_b);
 
         p1.set_fermi(nucl->Ef(p1));
+
 
         // If kinetic energy is below "barrier" = Ef + kaskada_w, jail back to nucleus
         if (p1.Ek() <= kaskada_w + p1.his_fermi)
@@ -536,7 +642,7 @@ void kaskada::prepare_particles()
 }
 
 // Prepare a single nucleon (typically N1) to be re-run in a redraw scenario:
-void kaskada::prepare_single_nucleon_for_redraw(const particle N1, int index)
+void kaskada::prepare_single_nucleon_for_redraw(particle N1, int index)
 {
 
   if (!nucleon(N1.pdg)) return;
@@ -544,15 +650,23 @@ void kaskada::prepare_single_nucleon_for_redraw(const particle N1, int index)
     particle pN = N1;
     pN.primary = true;
 
-        if (index == 1) pN.nucleon_id = 1;
-        else if (index == 2) pN.nucleon_id = 2;
-        else pN.nucleon_id = 0;
+        if (index == 1) {
+           pN.nucleon_id = 1;
+        }   
+        else if (index == 2) {
+           pN.nucleon_id = 2;
+        }   
+        else {
+           pN.nucleon_id = 0;
+        }   
 
-    pN.set_energy (pN.E() + nucl->Ef(pN));
+    const double kaskada_w = par.kaskada_w;
+
+    pN.set_energy (pN.E() + nucl->Ef(pN) + kaskada_w);
 
     pN.set_fermi(nucl->Ef(pN));
 
-    if (pN.Ek() <= pN.his_fermi)
+    if (pN.Ek() <= pN.his_fermi + kaskada_w)
     {
         pN.endproc = jailed;
         nucl->insert_nucleon(pN);
@@ -640,8 +754,7 @@ bool kaskada::move_particle()
 
   if(p->nucleon())
   {
-
-    double kaskada_w = use_optical_potential() ? 0.0 : par.kaskada_w;
+    double kaskada_w = par.kaskada_w;
 
     // jail nucleon if its kinetic energy is lower than "binding" energy
     if (p->Ek() <= kaskada_w + p->his_fermi)
@@ -673,20 +786,13 @@ bool kaskada::move_particle()
 // Decide if particle escapes or is jailed when reaching nuclear boundary and apply the corresponding energy shift
 bool kaskada::leave_nucleus()
 {
-
   // Nucleons: go through final "climb-out of potential well" and possible jailing
   if (nucleon (p->pdg))
   {
-  double U = (e->flag.qel && par.U_switch == 1 && par.sf_method != 0)
-             ? par.FSI_on == 1
-                 ? e->optical_potential
-                 : p->pdg == pdg_proton ? e->averageCE : 0.0
-             : 0.0;
+    double kaskada_w = par.kaskada_w;
 
-    double kaskada_w = use_optical_potential() ? 0.0 : par.kaskada_w;
-
-    // If KE still below (Ef - U) at surface, jail nucleon
-    if (p->Ek() <= p->his_fermi + kaskada_w - U)
+    // If KE below (Ef + W) at surface, jail nucleon
+    if (p->Ek() <= p->his_fermi + kaskada_w)
     {
       p->endproc=jailed;
       nucl->insert_nucleon (*p);
@@ -694,7 +800,7 @@ bool kaskada::leave_nucleus()
       return false; // particle did not escape
     }
 
-      p->set_energy(p->E() - p->his_fermi - kaskada_w + U);
+      p->set_energy(p->E() - p->his_fermi - kaskada_w);
 
   }
   else if(hyperon(p->pdg))
@@ -718,36 +824,6 @@ bool kaskada::leave_nucleus()
   if(par.kaskada_writeall) e->all.push_back (*p);
 
   return true; // particle has escaped
-
-}
-
-bool kaskada::leave_nucleus_for_single_nucleon(particle &N)
-{
-  if (!nucleon(N.pdg)) return true;
-
-  double U = (e->flag.qel && par.U_switch == 1 && par.sf_method != 0)
-             ? par.FSI_on == 1
-                 ? e->optical_potential
-                 : N.pdg == pdg_proton ? e->averageCE : 0.0
-             : 0.0;
-
-  double kaskada_w = use_optical_potential() ? 0.0 : par.kaskada_w;
-
-  N.set_fermi(nucl->Ef(N));
-
-  if (N.Ek() <= N.his_fermi + kaskada_w - U) {
-    N.endproc = jailed;
-    nucl->insert_nucleon(N);
-    return false;
-  }
-
-  N.set_energy(N.E() - N.his_fermi - kaskada_w + U);
-  N.endproc = escape;
-
-  e->post.push_back(N);
-  if(par.kaskada_writeall) e->all.push_back (N);
-
-  return true;
 
 }
 
@@ -857,7 +933,7 @@ bool kaskada::finalize_interaction()
     X.p[i].r = p->r;
     X.p[i].travelled = 0;
 
-    double kaskada_w = use_optical_potential() ? 0.0 : par.kaskada_w;
+    double kaskada_w = par.kaskada_w;
 
     // jail nucleon if its kinetic energy is lower than work function
     if (nucleon (X.p[i].pdg) and X.p[i].Ek() <= kaskada_w + X.p[i].his_fermi)
@@ -921,7 +997,7 @@ bool kaskada::finalize_interaction()
 void kaskada::clean()
 {
 
-  while(! parts.empty())
+  while(!parts.empty())
   {
     particle p0 = parts.front();
 
@@ -981,4 +1057,3 @@ bool kaskada::check2 (particle & p1, particle & p2, particle *spect, int n, part
   }
   return true;
 }
-

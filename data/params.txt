@@ -167,12 +167,13 @@ sf_method  = 1 // Jlab SF for Argon, new grid SF for C, grid SF for O and Fe
 #sf_method = 3 // factorized SF for O, Ar, Ca
 
 sf_transparency_table_idx = 1 # Transparency
-#                               1 - Theoretical, 2 - NuWro MC
-sf_transparency_scale = 1  # Scale transparency
+#                               1 - Theoretical (see arXiv:2508.10101 [hep-ph])
+#                               2 - tuned NuWro MC for stronger INC (see Phys.Rev.D 113 (2026) 9, 096023)
+sf_transparency_scale = 1  # Scale transparency for uncertainty analysis
 #                            [0.97,1.03] for table_idx = 1
 #                            [0.947,1.079] for table_idx = 2
 sf_recoil = 1             # Nuclear recoil
-sf_Coulomb = 1            # Couloumb distortion
+sf_Coulomb = 1            # Couloumb distortion (for U_switch = 1)
 sf_src = 1                # Short range NN correlations
 sf_pb = 1                 # Pauli blocking method used for SF:
 #                           1- average Fermi momentum, 2- local Fermi momentum
@@ -334,15 +335,15 @@ hyp_su3_sym_breaking = 0 // SU(3) symmetry breaking
 #
 ################################################################################
 
-# Turn on FSI
+# Turn on Final-state Interactions
 FSI_on       = 1  // use (1) or not (0)
 
 # Total work of the cascade W (Eb = Ef + W);
 kaskada_w        = 7  // literature [7 MeV, 9 MeV]
 
-# For sf_method != 0
-# U_switch = 1 → use optical potential U in cascade (kaskada_w = 0)
-# U_switch = 0 → ignore U and keep kaskada_w
+# For sf_method != 0 in QE
+# U_switch = 1 → use nuclear potential 
+# U_switch = 0 → ignore nuclear potential 
 U_switch = 1
 
 # Models for the description of nucleus in the cascade:
@@ -358,7 +359,7 @@ step = 0.2           // length of one step in cascade
 # It has been checked against transparency data that
 # the uncertainty here is not larger than +- 30%
 # -> see Phys.Rev. C 100 (2019) 015505
-# Later study, see e-Print: 2512.23350 [hep-ph] resulted in estimate s=0.76-0.04+0.06
+# Later study (see Phys.Rev.D 113 (2026) 9, 096023) resulted in estimate s=0.76-0.04+0.06
 kaskada_NN_mfp_scale = 0.76
 
 # Input data for the cascade:

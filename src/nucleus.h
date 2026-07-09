@@ -69,12 +69,12 @@ class nucleus
 {
 	public:
 
-	int p;                              ///< initial number of protons
-	int n;                              ///< initial number of neutrons
-	particle *spectator;                ///< nucleon on which absorbtion took place
-        int MAX_EVENT_REDRAWS = 10;         ///< maximum number of cascade-redraw loops
-        double effective_mfp_scale = 0.4;   ///< cascade-redraw scaling parameter
-        double cosine_threshold = 0.01;     ///< angular threshold to identify noninteracted struck nucleon
+	int p;                                 ///< initial number of protons
+	int n;                                 ///< initial number of neutrons
+	particle *spectator;                   ///< nucleon on which absorbtion took place
+        int MAX_EVENT_REDRAWS = 20;            ///< maximum number of cascade-redraw loops
+        double effective_mfp_scale = 0.5;      ///< cascade-redraw scaling parameter
+        double cosine_threshold = 1.52e-4;     ///< angular threshold to identify noninteracted struck nucleon
 
 	private:
 

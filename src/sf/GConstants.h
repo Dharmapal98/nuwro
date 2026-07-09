@@ -180,11 +180,11 @@ struct TargetData
 };
 
 //                        A   Z  PBlock    E1        E2
-const TargetData carbon ( 12,  6, 209);
-const TargetData oxygen ( 16,  8, 209, 19.5855, 26.3294 );
+const TargetData carbon ( 12,  6, 211);
+const TargetData oxygen ( 16,  8, 212, 19.5855, 26.3294 );
 const TargetData calcium( 40, 20, 217, 29.2565, 16.4631 );
-const TargetData argon  ( 40, 18, 217, 29.2565, 16.4631 );
-const TargetData iron   ( 56, 26, 225);
+const TargetData argon  ( 40, 18, 220, 29.2565, 16.4631 );
+const TargetData iron   ( 56, 26, 226);
 
 // Coefficients for the Gausian Approximation of the Spectral Function
 const double OxygenN[] =
