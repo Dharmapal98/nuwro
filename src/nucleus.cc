@@ -97,19 +97,34 @@ particle nucleus::get_nucleon ()
 	//if more nucleons in the target
 	return get_nucleon (get_random_r () * rand_dir ());
 }
+
 particle nucleus::get_nucleon (vec r)
 {
-	particle p0;
-	p0.r=r;
+	int target_pdg;
 	if(nr==0 || (pr!=0 && frandom () < frac_proton()))
-		p0.set_proton ();
+		target_pdg = PDG::pdg_proton;
 	else
-		p0.set_neutron ();
-	/*~ if(pr+nr==1)
-	~ {
-		~ p0.set_momentum(vec(_p4));
-		~ return p0;
-	~ }*/
+		target_pdg = PDG::pdg_neutron;
+
+	return get_nucleon(r, target_pdg);
+}
+
+particle nucleus::get_nucleon (vec r, int pdg)
+{
+	assert((pdg == PDG::pdg_proton || pdg == PDG::pdg_neutron)
+	       && "nucleus::get_nucleon requires proton or neutron pdg");
+	assert((pdg != PDG::pdg_proton || pr > 0)
+	       && "requested proton target is unavailable");
+	assert((pdg != PDG::pdg_neutron || nr > 0)
+	       && "requested neutron target is unavailable");
+
+	particle p0;
+	p0.r = r;
+
+	if(pdg == PDG::pdg_proton)
+		p0.set_proton();
+	else
+		p0.set_neutron();
 
 	if(p==1 and n==1)
 	{
@@ -119,24 +134,32 @@ particle nucleus::get_nucleon (vec r)
 
 	switch(kMomDist)
 	{
-		case  1: p0.set_momentum(rand_from_ball(_kf)); break; // global fermi gas
-		case  2: p0.set_momentum(rand_from_ball(localkf(p0)));break; // local fermi gas
-		case  3: p0.set_momentum(bodek_rand_from_ball(_kf)); break; //Bodek Ritchie
-		case  4: assert ("effective SF can be run only for carbon and oxygen" && p==n && (p==6 || p==8) ); //effective SF is defined only for two targets
-					p0.set_momentum(spectral_choice(p,n));	break;
+		case  1: p0.set_momentum(rand_from_ball(_kf)); break; // global Fermi gas
+		case  2: p0.set_momentum(rand_from_ball(localkf(p0))); break; // local Fermi gas
+		case  3: p0.set_momentum(bodek_rand_from_ball(_kf)); break; // Bodek Ritchie
+		case  4:
+			assert("effective SF can be run only for carbon and oxygen" && p==n && (p==6 || p==8));
+			p0.set_momentum(spectral_choice(p,n));
+			break;
 		case  0: // free nucleon
-		case  5: p0.set_momentum(deuterium()); break; //deuterium
-		case  6: p0.set_momentum(rand_from_ball(localkf(p0))); break; //effective potential
-		default: p0.set_momentum(rand_from_ball(localkf(p0)));  //local Fermi Gas
-
+		case  5: p0.set_momentum(deuterium()); break; // deuterium
+		case  6: p0.set_momentum(rand_from_ball(localkf(p0))); break; // effective potential
+		default: p0.set_momentum(rand_from_ball(localkf(p0))); // local Fermi Gas
 	}
 
 	// account for the fact that the nucleus is in motion
 	//p0.set_momentum(p0.p()+vec(_p4)/Ar()); ////???????
-	if(not (p0.v2()<1)) {
-		cerr<<kMomDist<<" p="<<this->p<<" n="<<this->n<<" lkf="<<localkf(p0)<<" v2="<< p0.v2()<<" "<<p0.v()<<endl;
-	// assert(p0.v2()<1);
-  }
+	if(not (p0.v2()<1))
+	{
+		cerr << kMomDist
+		     << " p=" << this->p
+		     << " n=" << this->n
+		     << " lkf=" << localkf(p0)
+		     << " v2=" << p0.v2()
+		     << " " << p0.v()
+		     << endl;
+		// assert(p0.v2()<1);
+	}
 	return p0;
 }
 

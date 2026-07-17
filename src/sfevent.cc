@@ -37,20 +37,21 @@ double sfevent(params &par, event &e, nucleus &t)
   const int N = par.nucleus_n;
 
   // Interaction flags
-  const bool isAnti = l0.pdg < 0;              // true for anti-neutrino
-  const bool onNeutron = N0.pdg == pdg_neutron;// true for target neutron
-  const bool ccAllowed = isAnti ^ onNeutron;   // true for nu+n and nubar+p
-  const bool isElectron = (l0.pdg == pdg_e);   // true for electron interactions
-  const bool isNC = e.flag.nc;                 // true for neutral current intercations
-  const bool doPB = par.pauli_blocking == 1;   // true for enabled pauli blocking
-  const bool doRecoil = par.sf_recoil == 1;    // true for nuclear recoil
-  const bool doCoulomb = par.sf_Coulomb == 1;  // true for coulomb distortion
-  const bool doFSI = par.FSI_on == 1;          // true for FSI
-  const bool doSRC = par.sf_src == 1;          // true for SRC
+  const bool isAnti = l0.pdg < 0;                      // true for anti-neutrino
+  const bool onNeutron = N0.pdg == pdg_neutron;        // true for target neutron
+  const bool ccAllowed = isAnti ^ onNeutron;           // true for nu+n and nubar+p
+  const bool isElectron = (l0.pdg == pdg_e);           // true for electron interactions
+  const bool isNC = e.flag.nc;                         // true for neutral current intercations
+  const bool doPB = par.pauli_blocking == 1;           // true for enabled pauli blocking
+  const bool doRecoil = par.sf_recoil == 1;            // true for nuclear recoil
+  const bool useU = (par.U_switch == 1);               // use nuclear potential
+  const bool doCoulomb = useU && (par.sf_Coulomb == 1);// true for Coulomb correction
+  const bool doFSI = par.FSI_on == 1;                  // true for FSI
+  const bool doSRC = par.sf_src == 1;                  // true for SRC
 
   int method = par.sf_method;
   bool isCorrelated = false;
-  double pot( 0.0 ), pot_cascade( 0.0 ), prefactor( 1.0 ), xs( 1.0 );
+  double pot( 0.0 ), prefactor( 1.0 ), xs( 1.0 );
   double factor = isAnti ? -1 : 1 ;
 
   if ((e.flag.cc && !ccAllowed) || method == 0) return 0; // If charged current (CC) interaction isn't possible, exit
@@ -80,10 +81,11 @@ double sfevent(params &par, event &e, nucleus &t)
 
   const double mi = mass( l0.pdg );       // incoming lepton mass
   const double m = mass( l1.pdg );        // outgoing lepton mass
-  const double M = N1.mass();             // outgoing nucleon mass // check?
+  const double Mout = N1.mass();          // outgoing nucleon mass
+  const double Minit = N0.mass();         // target nucleon mass
   const double mi2 = mi * mi;             // incoming lepton mass squared
   const double m2 = m * m;                // outgoing lepton mass squared
-  const double MSq = M * M;               // outgoing nucleon mass squared
+  const double MSq = Mout * Mout;         // outgoing nucleon mass squared
   l1.set_mass( m );                       // set outgoing lepton mass
 
    // Set the target nucleus
@@ -95,6 +97,7 @@ double sfevent(params &par, event &e, nucleus &t)
    if (target == TargetNucleus::Unsupported) return 0;
 
    const bool isAr40 = (target == Ar40_SF);
+   const double SRC_cut = (target == C12_newSF) ? 19 : 14;
 
     // Create the spectral function object for sf_method = 1
     SFKey key = std::make_tuple(target, doSRC, doFSI);
@@ -182,23 +185,26 @@ double sfevent(params &par, event &e, nucleus &t)
         : sf->generateAdditionalNeutronsMomentum( p, E, N0.p().dir() );
 
     N2.set_momentum( spectatorNucleonMomentum );
+
+    if (isCorrelated && N2.momentum() <= 1e-6) return 0;
   }
-  else
+  else {
     N2.set_momentum( -N0.p() ); // Back-to-back approximation for other targets
+  }
 
   // Apply Nuclear recoil
-  const double targNucleusMass = sf->get_targetMass();          // target nucleus mass
-  const double residualNucleusMass =  targNucleusMass - M + E ; // Residual (& excited) nucleus mass after one nucleon knock-out
+  const double targNucleusMass = sf->get_targetMass();              // target nucleus mass
+  const double residualNucleusMass =  targNucleusMass - Minit + E ; // Residual (& excited) nucleus mass after one nucleon knock-out
   const double residualNucleusEnergy = std::sqrt( pow2( residualNucleusMass ) + pow2( p ) ) ; // residual nucleus energy
 
   vect s = l0eff + N0; // s Mandelstam-like
   s.t = doRecoil
         ? l0eff.E() + targNucleusMass - residualNucleusEnergy
-        : l0eff.E() + M - E;         // adjust the initial energy
+        : l0eff.E() + Minit - E;        // adjust the initial energy
   const double s2 = s * s;
-  if (s2 < pow2( M + m )) return 0;  // Unphysical invariant mass
+  if (s2 < pow2( Mout + m )) return 0;  // Unphysical invariant mass
 
-  const vec v = s.v();               // the velocity of cms frame
+  const vec v = s.v();                  // the velocity of cms frame
   const double mom_cms = sqrt( 0.25 * pow2( s2 + m2 - MSq ) / s2 - m2 );
   const vec dir_cms = rand_dir();
 
@@ -214,38 +220,57 @@ double sfevent(params &par, event &e, nucleus &t)
   const double kSq = pow2( l0.momentum() );
   const double kSq_eff_max = pow2( E_l0 + maxCE ) - mi2;
   const double focusingFactorIncomingSq = ( isElectron ) ? ( kSq_eff_max / kSq ) : 1;
-  
+
   const double E_l1 = ( isAnti && l1.Ek() + maxCE < 0) ? l1.E() - maxCE : l1.E();
   const double kPrimeSq_eff_max = pow2( E_l1 + maxCE ) - m2;
   const double kPrimeSq_eff = pow2( E_l1 + averCE ) - m2;
   const double focusingFactorOutgoingSq = kPrimeSq_eff_max / kPrimeSq_eff;
-  
-  if ((kSq <= 0) || (kPrimeSq_eff <= 0)) return 0;
 
+  if ((kSq <= 0) || (kPrimeSq_eff <= 0)) return 0;
   const double focusingFactorSq = ( focusingFactorIncomingSq * focusingFactorOutgoingSq );
-  
+
    // FSI
    bool isTransparent = true;
+   double shift(0.0);
 
    if (doFSI)
    {
-       const double Tk = tPPrime_approx( e.in[0].E(), l1.p().z / l1.momentum(), isElectron, isNC, m2, M ) ;
-       const double rOP = sf->eval_realOP( Tk );                      // Real part of the optical potential
-       pot = ( N1.pdg == pdg_neutron ) ? rOP - factor * averCE: rOP ; // correct for proton and neutron
-       int tidx = par.sf_transparency_table_idx - 1;  // 1→0, 2→1
+    const double Tk = tPPrime_approx(
+        e.in[0].E(),
+        l1.p().z / l1.momentum(),
+        isElectron,
+        isNC,
+        m2,
+        Mout
+    );
 
-      isTransparent = ( frandom11() <= sf->eval_sqrtOfTransparency(Tk, par.sf_transparency_scale, tidx) );
-      if (!isTransparent)
-      {
-          const double shift = pot + random_omega();
-          if( l1.E() - l0eff.E() > shift ) return 0;
-          else pot = shift;
-       }
-   }
-   
-   double U = std::min(0.0, pot);
-   
-  // Pauli blocking   
+    int tidx = par.sf_transparency_table_idx - 1;
+
+    isTransparent =
+        (frandom11() <= sf->eval_sqrtOfTransparency(
+            Tk,
+            par.sf_transparency_scale,
+            tidx
+        ));
+
+    if (useU)
+    {
+        const double rOP = sf->eval_realOP(Tk);
+
+        pot = (N1.pdg == pdg_neutron)
+            ? rOP - averCE
+            : rOP;
+
+        if (!isTransparent)
+        {
+            shift = pot + random_omega();
+            if (l1.E() - l0eff.E() > shift) return 0;
+            else pot = shift;
+        }
+    }
+    }
+
+  // Pauli blocking
   if (doPB && par.sf_pb != 0 &&
      ((par.sf_pb == 1 && sf->eval_particleSF(N1.pdg, N1.momentum()) == 0.0) ||
       (par.sf_pb == 2 && N1.momentum() < t.localkf(N1))))
@@ -254,7 +279,7 @@ double sfevent(params &par, event &e, nucleus &t)
   vect  q = N1 - N0; // four-momentum transfer (hadronic side)
   vect qq = l0 - l1; // four-momentum transfer (leptonic side)
 
-  const double sphereArea = 4 * Pi * mom_cms * mom_cms;                         
+  const double sphereArea = 4 * Pi * mom_cms * mom_cms;
   const double graddelta = ( l1.v() - N1.v() ).length();                        // Gradient for Dirac delta when integrating over k'
   const double surfscale = sqrt( 1 - pow2( v * dir_cms ) ) / sqrt( 1 - v * v ); // Surface scaling when going from lab (elipsoide) to cms (sphere)
   const double jacobian =  sphereArea * ( surfscale / graddelta );
@@ -274,15 +299,14 @@ double sfevent(params &par, event &e, nucleus &t)
                    : prefactor * SF.evalLHnc( q*q, l0*N0, l1*N0, N0*q, l0*q, l1*q, l0*l1 );
   }
 
-   // Apply nuclear effects
+   // Apply nuclear potential
    double en_thr = isAnti ? pot : averCE + pot;
-   if (l1.Ek() > en_thr) l1.set_energy( l1.E() - averCE - pot );
+
+   if (l1.Ek() > en_thr) l1.set_energy(l1.E() - en_thr);
    else return 0;
 
-   if(!onNeutron) {
-     if( N1.Ek() > -averCE ) N1.set_energy( N1.E() + averCE );
-     else return 0;
-   }
+   if (N1.Ek() > -en_thr) N1.set_energy(N1.E() + en_thr);
+   else return 0;
 
    //fixing a bug in initial nucleon energy
    if (N0.mass() > E) N0.t = N0.mass() - E;
@@ -297,27 +321,24 @@ double sfevent(params &par, event &e, nucleus &t)
   const double root( radicand < 0.0 ? 0.0 : sqrt( radicand ) );
   const double minimalOmegaExact( ( coefASq * coefB - pow2(coefC) * l0eff.E() - coefC * root ) / ( pow2(coefB) - pow2(coefC) ) );
   if (l0eff.E() - l1.E() < minimalOmegaExact) return 0;
-  
-    // Approximated SRC (except argon SF)
-    if ((method == 1 && !isAr40) || (method > 1))
-    {
-      if (doSRC && is_src(p, E, Z, N, !onNeutron) && (l0eff.t - l1.t - N1.Ek() - N2.Ek()) > 14)
-        isCorrelated = true;
-      else
-        isCorrelated = false;
-    }
+
+  // approximated-SRC
+  if ((method == 1 && !isAr40) || (method > 1))
+  {
+    if (doSRC && is_src(p, E, Z, N, !onNeutron) && (l0eff.t - l1.t - N1.Ek() - N2.Ek()) > SRC_cut)
+      isCorrelated = true;
+    else
+      isCorrelated = false;
+  }
 
   e.weight = xs / cm2;                   // Add cross-section as the weight
-  
   e.in[1] = N0;                          // Update target nucleon state
   e.out.push_back(l1);                   // Add outgoing lepton to event.
   e.out.push_back(N1);                   // Struck nucleon added to out
-  if (isCorrelated && N2.momentum() > 1e-6) {e.out.push_back(N2);} // Handle spectator nucleon
+  if (isCorrelated) {e.out.push_back(N2);} // Handle spectator nucleon
 
-  e.averageCE = averCE;
   e.flag.isTransparent = isTransparent;
-  e.optical_potential  = U; 
-  e.flag.isCorrelated  = isCorrelated;  
+  e.flag.isCorrelated  = isCorrelated;
 
   // Apply acceptance cut for electron scattering
   if (isElectron)
@@ -381,7 +402,7 @@ bool is_src(double p, double E, int Z, int N, bool is_on_p)
     if (p > 330) return true;
   }
   // oxygen
-  // Benhar SF; basically for protons but taken the same for neutrons  
+  // Benhar SF; basically for protons but taken the same for neutrons
   if (Z == 8 && N == 8)
   {
     if (p < 85 && E > 63) return true;
@@ -409,7 +430,7 @@ bool is_src(double p, double E, int Z, int N, bool is_on_p)
 
     if (p > 395) return true;
   }
-  }  
+  }
   // iron
   // Benhar SF; basically for protons but taken the same for neutrons
   if (Z == 26 && N == 30)
