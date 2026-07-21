@@ -83,10 +83,6 @@ class event:public TObject
 		int pr;     ///< number of protons  in the residual nucleus
 		int nr;     ///< number of neutrons in the residual nucleus
 		double r_distance; //< distance from nucleus center of absorption point (if happened)
-
-		double optical_potential = 0.0; 
-		double averageCE = 0.0;
-
 		double res_jacobian; ///< store Jacobian calculated in RES for random kinematics
 		double res_angrew;   ///< store xsec factor coming from angular distribution (for Delta)
 		particle res_nu;     ///< store neutrino for reweighting

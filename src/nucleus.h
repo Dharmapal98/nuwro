@@ -136,6 +136,7 @@ class nucleus
 	double Ef();                             ///< nucleon Fermi energy
 	double Eb(){return _Eb;}                 ///< nucleon binding energy (from experimantal data)
 	particle get_nucleon (vec r);            ///< random nucleon located at r (used in Interaction.cc)
+        particle get_nucleon (vec r, int pdg);   ///< random proton or neutron located at r
 	particle get_nucleon ();                 ///< random nucleon (used in nuwro.cc)
 	bool pauli_blocking (particle & pa);     ///< true if the particle is blocked
 	bool pauli_blocking (particle p[], int n); ///< true if any of p[0]..p[n-1] is blocked (used in cascade)

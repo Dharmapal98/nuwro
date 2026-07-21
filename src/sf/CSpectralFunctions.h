@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <limits>
 #include <iostream>
+#include <cstdlib>
 #include <sstream>
 #include <cmath>
 #include <vector>
@@ -44,19 +45,16 @@ inline std::string nuwro_base()
 
     char exe_path[PATH_MAX];
 
- // --- Linux ---------------------------------------------------------------
+
 #if defined(__linux__)
     {
         ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
         if (len > 0) {
             exe_path[len] = '\0';
             cached = exe_path;
-            //            std::cout << "[DBG] Full exe path: " << cached << "\n";
-
         }
     }
-
- // --- macOS / BSD -------------------------------------------------------
+    
 #elif defined(__APPLE__) || defined(__FreeBSD__)
     {
         uint32_t size = sizeof(exe_path);
@@ -65,28 +63,23 @@ inline std::string nuwro_base()
         }
     }
 
- // --- Other systems ------------------------------------------------------
 #else
     cached = ".";
 #endif
 
     // If failed to detect anything, fallback to "."
     if (cached.empty()) {
-        //std::cout << "[DBG] Failed to detect path → using '.'\n";
         cached = ".";
         return cached;
     }
 
     // At this point, cached contains the full executable path.
     // Now strip the filename or "/bin/<name>" component.
-
     // Prefer to remove "/bin/<something>"
     std::size_t pos = cached.rfind("/bin/");
     if (pos != std::string::npos) {
         std::string before = cached;
         cached = cached.substr(0, pos);
-        //        std::cout << "[DBG] Removed /bin/*: " << before << " → " << cached << "\n";
-
         return cached;
     }
 
@@ -95,11 +88,9 @@ inline std::string nuwro_base()
     if (pos != std::string::npos) {
         std::string before = cached;
         cached = cached.substr(0, pos);
-        //        std::cout << "[DBG] Removed filename: " << before << " → " << cached << "\n";
         return cached;
     }
 
-    // Ultimate fallback
     cached = ".";
     return cached;
 }
@@ -110,7 +101,6 @@ inline std::string resolve_sf_path(const std::string& rel)
 {
     return nuwro_base() + "/" + rel;
 }
-
 
 /// Class: CSpectralFunctions
 /// Encapsulates proton/neutron spectral functions and momentum distributions for different nuclei
@@ -436,6 +426,9 @@ class CSpectralFunctions {
             while ( true )
             {
                 const double p( m_pLorentz->generate() );
+                
+            if ( p < m_pHoleSF->get_xStart() || p > m_pHoleSF->get_xStop() )
+            continue;
 
                 const double lor ( m_pLorentz->eval(p) );
 
@@ -451,6 +444,9 @@ class CSpectralFunctions {
             while ( true )
             {
                 const double p( m_pLorentz_MF->generate() );
+                
+            if ( p < m_pHoleSF_MF->get_xStart() || p > m_pHoleSF_MF->get_xStop() )
+            continue;
 
                 const double lor ( m_pLorentz_MF->eval(p) );
 
@@ -466,6 +462,9 @@ class CSpectralFunctions {
             while ( true )
             {
                 const double p( m_pLorentz_corr->generate() );
+                
+            if ( p < m_pHoleSF_corr->get_xStart() || p > m_pHoleSF_corr->get_xStop() )
+            continue;
 
                 const double lor ( m_pLorentz_corr->eval(p) );
 
@@ -481,6 +480,9 @@ class CSpectralFunctions {
             while ( m_switchIsospinAsymmetry )
             {
                 const double p( m_nLorentz->generate() );
+                
+            if ( p < m_nHoleSF->get_xStart() || p > m_nHoleSF->get_xStop() )
+            continue;
 
                 const double lor ( m_nLorentz->eval(p) );
 
@@ -496,6 +498,9 @@ class CSpectralFunctions {
             while ( m_switchIsospinAsymmetry )
             {
                 const double p( m_nLorentz_MF->generate() );
+                
+            if ( p < m_nHoleSF_MF->get_xStart() || p > m_nHoleSF_MF->get_xStop() )
+            continue;
 
                 const double lor ( m_nLorentz_MF->eval(p) );
 
@@ -511,6 +516,9 @@ class CSpectralFunctions {
             while ( m_switchIsospinAsymmetry )
             {
                 const double p( m_nLorentz_corr->generate() );
+                
+            if ( p < m_nHoleSF_corr->get_xStart() || p > m_nHoleSF_corr->get_xStop() )
+            continue;
 
                 const double lor ( m_nLorentz_corr->eval(p) );
 
